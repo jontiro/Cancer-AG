@@ -113,7 +113,7 @@ ga_instance = pygad.GA(
     mutation_percent_genes=1,
     on_generation=on_generation,
     random_seed=42,
-    parallel_processing=["thread", 16] # Usar 16 hilos
+    #parallel_processing=["thread", 16] # Usar 16 hilos
 )
 
 ga_instance.run()
@@ -123,20 +123,20 @@ solution, solution_fitness, _ = ga_instance.best_solution()
 selected_genes_indices = np.where(solution == 1)[0]
 selected_genes_names = gene_names[selected_genes_indices]
 
-print("\n" + "="*70)
+print("\n" + "=" * 70)
 print("RESULTADOS FINALES")
-print("="*70)
+print("=" * 70)
 print(f"Fitness: {solution_fitness:.4f}")
 print(f"Genes seleccionados: {len(selected_genes_names)}")
 
 if len(selected_genes_names) > 0:
-    print(f"Reducción: {(1 - len(selected_genes_names)/num_genes)*100:.1f}%")
+    print(f"Reducción: {(1 - len(selected_genes_names) / num_genes) * 100:.1f}%")
 
     # Validación con todos los datos
     X_final = X_full[:, selected_genes_indices]
     clf_final = RandomForestClassifier(
-        n_estimators=100,
-        max_depth=2,
+        n_estimators=500,
+        max_depth=15,
         random_state=42,
         n_jobs=-1
     )
@@ -146,21 +146,39 @@ if len(selected_genes_names) > 0:
 
     print(f"\nPrecisión en TODOS los pacientes: {accuracy_final * 100:.2f}%")
 
-    print(f"\nPRIMEROS 20 GENES:")
-    for i, gene in enumerate(selected_genes_names[:20], 1):
-        print(f"  {i:2d}. {gene}")
+    # ← NUEVO: Calcular importancia de cada gen
+    importances = clf_final.feature_importances_
+    gene_importance = list(zip(selected_genes_names, importances))
+    gene_importance_sorted = sorted(gene_importance, key=lambda x: x[1], reverse=True)
 
-    if len(selected_genes_names) > 20:
-        print(f"  ... y {len(selected_genes_names) - 20} más")
+    # ← MOSTRAR TODOS LOS GENES ORDENADOS POR IMPORTANCIA
+    print(f"\n{'=' * 70}")
+    print(f"TODOS LOS {len(selected_genes_names)} GENES SELECCIONADOS (ordenados por importancia):")
+    print(f"{'=' * 70}")
+    print(f"{'#':<5} {'Gen':<20} {'Importancia':<15}")
+    print("-" * 70)
+
+    for i, (gene, importance) in enumerate(gene_importance_sorted, 1):
+        print(f"{i:<5} {gene:<20} {importance:.6f}")
+
+    print("=" * 70)
+
+    # ← GUARDAR EN ARCHIVO CSV
+    results_df = pd.DataFrame(gene_importance_sorted, columns=['Gen', 'Importancia'])
+    results_df['Ranking'] = range(1, len(results_df) + 1)
+    results_df = results_df[['Ranking', 'Gen', 'Importancia']]
+    results_df.to_csv('genes_seleccionados_cancer.csv', index=False)
+    print(f"\n✅ Resultados guardados en: genes_seleccionados_cancer.csv")
+
 else:
     print("\n⚠️  No se seleccionaron genes")
 
-print("\n" + "="*70)
+print("\n" + "=" * 70)
 print("EVOLUCIÓN:")
-print("="*70)
+print("=" * 70)
 print(f"Mejor generación: {ga_instance.best_solution_generation}")
 print(f"Fitness inicial: {ga_instance.best_solutions_fitness[0]:.4f}")
 print(f"Fitness final: {ga_instance.best_solutions_fitness[-1]:.4f}")
-print("="*70)
+print("=" * 70)
 
 ga_instance.plot_fitness()
