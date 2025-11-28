@@ -29,7 +29,7 @@ def fitness_func(ga_instance, solution, solution_idx):
     # Como PyGAD ya nos está paralelizando, el Random Forest debe ser
     # mononúcleo para no saturar el sistema.
     clf = RandomForestClassifier(
-        n_estimators=100,  # Bajé un poco esto para agilizar la evolución
+        n_estimators=100,
         max_depth=10,
         random_state=42,
         n_jobs=1  # IMPORTANTE: 1 solo trabajo por individuo
@@ -54,21 +54,45 @@ def on_generation(ga_instance):
 
 
 if __name__ == '__main__':
-    # --- PASO 1: CARGAR DATOS ---
-    print("Procesando datos...")
+    # --- PASO 1: CARGAR Y PROCESAR DATOS (LÓGICA MULTICLASE) ---
+    print("Procesando datos y creando etiquetas multiclase...")
     df_raw = pd.read_csv('dataset/datos.csv')  # Asegúrate que la ruta sea correcta
     gene_names = df_raw['ID'].values
-
     df_transposed = df_raw.set_index('ID').transpose()
 
+    print("Generando etiquetas corregidas...")
     labels = []
+
     for pid in df_transposed.index:
         if pid.startswith('N'):
-            labels.append(0)
+            labels.append(0)  # Sano
+        elif pid.startswith('1S'):
+            labels.append(1)  # Colon Etapa I
+        elif pid.startswith('2S'):
+            labels.append(2)  # Colon Etapa II
+        elif pid.startswith('3S'):
+            labels.append(3)  # Colon Etapa III
+        elif pid.startswith('4S'):
+            labels.append(4)  # Colon Etapa IV
+        elif pid.startswith('PC'):
+            labels.append(5)  # Próstata
+        elif pid.startswith('TB') or pid.startswith('S'):
+            labels.append(6)  # Páncreas
         else:
-            labels.append(1)
+            labels.append(-1)  # Desconocido
 
     df_transposed['Target'] = labels
+
+    # Validación rápida: Imprimimos cuántos hay de cada uno para asegurar que está bien
+    print("Conteo de clases detectadas:", df_transposed['Target'].value_counts().to_dict())
+
+    # Opcional: verificar que todas las muestras fueron etiquetadas
+    if -1 in labels:
+        print("ADVERTENCIA: Algunas muestras no pudieron ser etiquetadas.")
+        # Considera filtrar las muestras no etiquetadas si es necesario
+        # df_transposed = df_transposed[df_transposed['Target'] != -1]
+
+    print(f"Etiquetas creadas para {len(np.unique(df_transposed['Target']))} clases.")
 
     X = df_transposed.drop(columns=['Target']).values
     y = df_transposed['Target'].values
@@ -81,14 +105,12 @@ if __name__ == '__main__':
 
     # --- PASO 2: CONFIGURACIÓN AG ---
     num_genes = X_full.shape[1]
-
-    # Sincronizamos la población con tus hilos (16)
-    # Aumentamos sol_per_pop para darle más trabajo a la CPU
-    sol_per_pop = 32  # Múltiplo de 16 (2 individuos por núcleo por generación)
+    sol_per_pop = 32
+    num_parents_mating = 8
 
     ga_instance = pygad.GA(
-        num_generations=500, # Numero de generaciones
-        num_parents_mating=8,  # Aumentado proporcionalmente
+        num_generations=300,
+        num_parents_mating=num_parents_mating,
         fitness_func=fitness_func,
         sol_per_pop=sol_per_pop,
         num_genes=num_genes,
@@ -102,9 +124,6 @@ if __name__ == '__main__':
         mutation_percent_genes=1,
         on_generation=on_generation,
         random_seed=42,
-        # --- CAMBIO CLAVE 2: Multiprocesamiento ---
-        # "process": Usa núcleos reales (salta el bloqueo de Python)
-        # 16: Usa tus 16 hilos lógicos
         parallel_processing=["process", 16]
     )
 
@@ -124,17 +143,19 @@ if __name__ == '__main__':
     print(f"\nMejor Fitness: {solution_fitness:.4f}")
     print(f"Genes seleccionados: {len(selected_genes)}")
 
-    # Validación final (Aquí sí usamos n_jobs=-1 porque es una sola ejecución)
+    # Validación final con el mejor subconjunto de genes
     if len(selected_genes) > 0:
         X_final = X_full[:, selected_indices]
         clf_final = RandomForestClassifier(n_estimators=500, max_depth=15, n_jobs=-1, random_state=42)
         clf_final.fit(X_final, y_full)
         acc = accuracy_score(y_full, clf_final.predict(X_final))
-        print(f"Precisión Final: {acc * 100:.2f}%")
+        print(f"Precisión Final sobre el set de entrenamiento: {acc * 100:.2f}%")
 
-        # Guardar resultados
+        # Guardar resultados con importancia de características
         importances = clf_final.feature_importances_
         res = pd.DataFrame({'Gen': selected_genes, 'Importancia': importances})
         res = res.sort_values('Importancia', ascending=False)
-        res.to_csv('genes_top_cpu.csv', index=False)
-        print("Guardado en genes_top_cpu.csv")
+        res.to_csv('genes_top_multiclase.csv', index=False)
+        print("Guardado en genes_top_multiclase.csv")
+    else:
+        print("No se seleccionaron genes.")
