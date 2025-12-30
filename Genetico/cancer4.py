@@ -31,7 +31,7 @@ def fitness_func(ga_instance, solution, solution_idx):
     clf = RandomForestClassifier(
         n_estimators=100,
         max_depth=10,
-        random_state=42,
+        random_state=42, # Original seed 42
         n_jobs=1  # IMPORTANTE: 1 solo trabajo por individuo
     )
 
