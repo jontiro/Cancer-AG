@@ -23,7 +23,7 @@ El archivo `dataset/datos.csv` contiene:
 - **Filas**: Genes (identificados por ID)
 - **Columnas**: Pacientes organizados en grupos
 
-### Grupos de Pacientes (Total: 217 muestras)
+### Grupos de Pacientes (Total: 192 muestras)
 
 | Código | Descripción | Cantidad | Clase |
 |--------|-------------|----------|-------|
